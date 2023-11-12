@@ -27,8 +27,8 @@ LINES = [
 ]
 
 
-def http_url_fix_day(date: str, side: LineSide):
-    return f'http://10.13.89.96:83/home/reporte?entrada={date}00&salida={date}2300&transtype={side.value}'
+def http_url_fix_day(current_day: str, side: LineSide):
+    return f'http://10.13.89.96:83/home/reporte?entrada={current_day}00&salida={current_day}2300&transtype={side.value}'
 
 
 def get_outputs_current_day():
