@@ -4,6 +4,9 @@ from enum import Enum
 
 import requests
 
+from src.lib.util import Server
+from src.lib.util_config import get_ip
+
 
 class Area(Enum):
     SMT_IN = "SMT_IN"
@@ -16,19 +19,6 @@ class Type(Enum):
     MISS_TARGET = 'MISS_TARGET'
 
 
-class Host(Enum):
-    LOCAL = 'http://10.13.56.65:3040'
-    REMOTE = 'http://10.13.33.46:3040'
-
-
-def get_ip(host: Host):
-    match host:
-        case Host.LOCAL:
-            return host.value
-        case Host.REMOTE:
-            return host.value
-
-
 def get_credentials():
     return {
         'user': 'iradi_admin',
@@ -37,12 +27,12 @@ def get_credentials():
 
 
 def logs_dir():
-    return f'{get_ip(Host.LOCAL)}/api/collections/logs/records'
+    return f'http://{get_ip(Server.ONLINE)}:3040/api/collections/logs/records'
 
 
 def get_token():
     try:
-        url = f'{get_ip(Host.LOCAL)}/api/collections/users/auth-with-password'
+        url = f'http://{get_ip(Server.ONLINE)}:3040/api/collections/users/auth-with-password'
         token = requests.post(
             url=url,
             data={"identity": get_credentials()['user'], "password": get_credentials()['password']}
@@ -87,7 +77,7 @@ def get_current_day_lost_target_logs():
         print("OOps: Something Else", err)
 
 
-def post_target_loss_log(index, line, uph, target):
+def post_target_loss_log(area: Area, index, line, uph, target):
     current_day = date.today().strftime("%Y-%m-%d")
     try:
         logs = requests.post(
@@ -101,9 +91,11 @@ def post_target_loss_log(index, line, uph, target):
                 "hour": "00:00:00",
                 "index": index,
                 "line": line,
-                "area": Area.PACKING.value,
+                "area": area.value,
                 "type": Type.MISS_TARGET.value,
                 "payload": {
+                    "status": 'open',
+                    "issues_id": [],
                     "fix_val": [
                         index,
                         uph,

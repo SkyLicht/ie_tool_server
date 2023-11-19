@@ -1,8 +1,14 @@
+from array import array
+from dataclasses import dataclass, field
 import json
 from enum import Enum
 from datetime import date
+from typing import List
+
 import requests
 import itertools
+
+from src.lib.util_config import is_mackenzie_online
 
 
 class LineSide(Enum):
@@ -27,17 +33,69 @@ LINES = [
 ]
 
 
+@dataclass
+class OutputsData:
+    index: int
+    smt_in: int
+    smt_out: int
+    packing: int
+
+    def __init__(self, index, smt_in, smt_out, packing):
+        self.index = index
+        self.smt_in = smt_in
+        self.smt_out = smt_out
+        self.packing = packing
+
+    def print(self):
+        print(f'index: {self.index} smt in: {self.smt_in} smt out: {self.smt_out} packing: {self.packing} ')
+
+
+@dataclass
+class LineData:
+    line: str
+    data: List[OutputsData] = field(default_factory=dict)
+
+    def __init__(self, name, output_data: List[OutputsData]):
+        self.line = name
+        self.data = output_data
+
+    def log(self):
+        print(self.line)
+        print('-----------------------------------------------')
+        for i in self.data:
+            print(i.print())
+
+    def is_empty(self) -> bool:
+        temp = 0
+        for i in self.data:
+            temp += (i.smt_in + i.smt_out + i.packing)
+        if temp != 0: return True
+        return False
+
+    def length(self) -> int:
+        return len(self.data)
+
+
 def http_url_fix_day(current_day: str, side: LineSide):
     return f'http://10.13.89.96:83/home/reporte?entrada={current_day}00&salida={current_day}2300&transtype={side.value}'
 
 
-def get_outputs_current_day():
+def get_current_day_outputs_data() -> List[LineData]:
     current_day = date.today().strftime("%Y%m%d")
-    temp_lines = []
+    lines_data: List[LineData] = []
+
+    if not is_mackenzie_online():
+        print('mackenzie online')
+        for dummy in dummy_data:
+            print(dummy)
+        return []
     try:
+        '''get the output from mackenzie api'''
         smt_in = requests.get(http_url_fix_day(current_day, LineSide.SMT_IN))
         smt_out = requests.get(http_url_fix_day(current_day, LineSide.SMT_OUT))
         packing = requests.get(http_url_fix_day(current_day, LineSide.PACKING))
+        print('api responds', smt_in, smt_out, packing)
+
         dic_smt_in = {"smt_in": []}
         for k, g in itertools.groupby(smt_in.json(), key=lambda x: x['LINE']):
             f = {"line": translate_line_standard(k), "smt_in": list(g)}
@@ -60,53 +118,138 @@ def get_outputs_current_day():
 
         if len(dic_smt_out['smt_out']) > 0:
             dic_smt_out['smt_out'].pop(0)
-
-        dic_output = {"output": []}
+        dic_packing = {"packing": []}
         for k, g in itertools.groupby(packing.json(), key=lambda x: x['LINE']):
-            f = {"line": translate_line_standard(k), "output": list(g)}
-            for i in f.get('output'):
+            f = {"line": translate_line_standard(k), "packing": list(g)}
+            for i in f.get('packing'):
                 i.pop('LINE')
                 i.pop('NEXTDAY')
-            dic_output["output"].append(f)
+            dic_packing["packing"].append(f)
 
-        if len(dic_output['output']) > 0:
-            dic_output['output'].pop(0)
+        if len(dic_packing['packing']) > 0:
+            dic_packing['packing'].pop(0)
 
-            for line in LINES:
+        for line in LINES:
 
-                d1 = [a['smt_in'] for a in dic_smt_in['smt_in'] if a['line'] == line]
-                d2 = [a['smt_out'] for a in dic_smt_out['smt_out'] if a['line'] == line]
-                d3 = [a['output'] for a in dic_output['output'] if a['line'] == line]
+            d1 = [a['smt_in'] for a in dic_smt_in['smt_in'] if a['line'] == line]
+            d2 = [a['smt_out'] for a in dic_smt_out['smt_out'] if a['line'] == line]
+            d3 = [a['packing'] for a in dic_packing['packing'] if a['line'] == line]
+            hours: List[OutputsData] = []
 
-                hours = []
+            for i in range(24):
+                temp_hour: OutputsData = OutputsData(index=i, smt_in=0, smt_out=0, packing=0)
+                if len(d1) > 0:
+                    for h_smt_in in d1[0]:
+                        if h_smt_in['HOURS'] == translate_index_to_hour(i):
+                            temp_hour.smt_in = h_smt_in['QTY']
 
-                for i in range(24):
-                    temp_hour = {"index": i, "smt_in": 0, "smt_out": 0, "packing": 0}
-                    if len(d1) > 0:
-                        for h_smt_in in d1[0]:
-                            if h_smt_in['HOURS'] == translate_index_to_hour(i):
-                                temp_hour['smt_in'] = h_smt_in['QTY']
+                if len(d2) > 0:
+                    for h_smt_out in d2[0]:
+                        if h_smt_out['HOURS'] == translate_index_to_hour(i):
+                            temp_hour.smt_out = h_smt_out['QTY']
 
-                    if len(d2) > 0:
-                        for h_smt_out in d2[0]:
-                            if h_smt_out['HOURS'] == translate_index_to_hour(i):
-                                temp_hour['smt_out'] = h_smt_out['QTY']
+                if len(d3) > 0:
+                    for h_packing in d3[0]:
+                        if h_packing['HOURS'] == translate_index_to_hour(i):
+                            temp_hour.packing = h_packing['QTY']
 
-                    if len(d3) > 0:
-                        for h_packing in d3[0]:
-                            if h_packing['HOURS'] == translate_index_to_hour(i):
-                                temp_hour['packing'] = h_packing['QTY']
+                hours.append(temp_hour)
 
-                    if len(d3) != 0 and len(d3) != 0 and len(d3) != 0:
-                        hours.append(temp_hour)
+            temp_line = LineData(name=line, output_data=hours)
+            if temp_line.is_empty(): lines_data.append(temp_line)
 
-                temp_line = {'line': line, 'hours': hours}
-                temp_lines.append(temp_line)
+        # for l_i in lines_data:
+        #     l_i.log()
 
     except Exception as e:
         print(e)
 
-    return temp_lines
+    return lines_data
+
+
+def get_day_before_outputs_data() -> List[LineData]:
+    import datetime
+    today = datetime.date.today()
+    day = datetime.timedelta(days=1)
+    yesterday = today - day
+    lines_data: List[LineData] = []
+
+    try:
+        """get the output from mackenzie api'"""
+        smt_in = requests.get(http_url_fix_day(yesterday.strftime("%Y%m%d"), LineSide.SMT_IN))
+        smt_out = requests.get(http_url_fix_day(yesterday.strftime("%Y%m%d"), LineSide.SMT_OUT))
+        packing = requests.get(http_url_fix_day(yesterday.strftime("%Y%m%d"), LineSide.PACKING))
+        print('api responds', smt_in, smt_out, packing)
+
+        dic_smt_in = {"smt_in": []}
+        for k, g in itertools.groupby(smt_in.json(), key=lambda x: x['LINE']):
+            f = {"line": translate_line_standard(k), "smt_in": list(g)}
+            for i in f.get('smt_in'):
+                i.pop('LINE')
+                i.pop('NEXTDAY')
+
+            dic_smt_in["smt_in"].append(f)
+
+        if len(dic_smt_in['smt_in']) > 0:
+            dic_smt_in['smt_in'].pop(0)
+
+        dic_smt_out = {"smt_out": []}
+        for k, g in itertools.groupby(smt_out.json(), key=lambda x: x['LINE']):
+            f = {"line": translate_line_standard(k), "smt_out": list(g)}
+            for i in f.get('smt_out'):
+                i.pop('LINE')
+                i.pop('NEXTDAY')
+            dic_smt_out["smt_out"].append(f)
+
+        if len(dic_smt_out['smt_out']) > 0:
+            dic_smt_out['smt_out'].pop(0)
+        dic_packing = {"packing": []}
+        for k, g in itertools.groupby(packing.json(), key=lambda x: x['LINE']):
+            f = {"line": translate_line_standard(k), "packing": list(g)}
+            for i in f.get('packing'):
+                i.pop('LINE')
+                i.pop('NEXTDAY')
+            dic_packing["packing"].append(f)
+
+        if len(dic_packing['packing']) > 0:
+            dic_packing['packing'].pop(0)
+
+        for line in LINES:
+
+            d1 = [a['smt_in'] for a in dic_smt_in['smt_in'] if a['line'] == line]
+            d2 = [a['smt_out'] for a in dic_smt_out['smt_out'] if a['line'] == line]
+            d3 = [a['packing'] for a in dic_packing['packing'] if a['line'] == line]
+            hours: List[OutputsData] = []
+
+            for i in range(24):
+                temp_hour: OutputsData = OutputsData(index=i, smt_in=0, smt_out=0, packing=0)
+                if len(d1) > 0:
+                    for h_smt_in in d1[0]:
+                        if h_smt_in['HOURS'] == translate_index_to_hour(i):
+                            temp_hour.smt_in = h_smt_in['QTY']
+
+                if len(d2) > 0:
+                    for h_smt_out in d2[0]:
+                        if h_smt_out['HOURS'] == translate_index_to_hour(i):
+                            temp_hour.smt_out = h_smt_out['QTY']
+
+                if len(d3) > 0:
+                    for h_packing in d3[0]:
+                        if h_packing['HOURS'] == translate_index_to_hour(i):
+                            temp_hour.packing = h_packing['QTY']
+
+                hours.append(temp_hour)
+
+            temp_line = LineData(name=line, output_data=hours)
+            if temp_line.is_empty(): lines_data.append(temp_line)
+
+        for l_i in lines_data:
+            l_i.log()
+
+    except Exception as e:
+        print(e)
+
+    return lines_data
 
 
 def translate_line_standard(line):
