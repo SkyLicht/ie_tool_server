@@ -1,6 +1,5 @@
-from array import array
 from dataclasses import dataclass, field
-import json
+
 from enum import Enum
 from datetime import date
 from typing import List
@@ -51,7 +50,7 @@ class OutputsData:
 
 
 @dataclass
-class LineData:
+class LineWithOutputs:
     line: str
     data: List[OutputsData] = field(default_factory=dict)
 
@@ -75,14 +74,19 @@ class LineData:
     def length(self) -> int:
         return len(self.data)
 
+    def get_hour_by_index(self, index: int) -> OutputsData:
+        for element in self.data:
+            if element.index == index:
+                return element
+
 
 def http_url_fix_day(current_day: str, side: LineSide):
     return f'http://10.13.89.96:83/home/reporte?entrada={current_day}00&salida={current_day}2300&transtype={side.value}'
 
 
-def get_current_day_outputs_data() -> List[LineData]:
+def get_current_day_outputs_data() -> List[LineWithOutputs]:
     current_day = date.today().strftime("%Y%m%d")
-    lines_data: List[LineData] = []
+    lines_data: List[LineWithOutputs] = []
 
     if not is_mackenzie_online():
         print('mackenzie online')
@@ -155,7 +159,7 @@ def get_current_day_outputs_data() -> List[LineData]:
 
                 hours.append(temp_hour)
 
-            temp_line = LineData(name=line, output_data=hours)
+            temp_line = LineWithOutputs(name=line, output_data=hours)
             if temp_line.is_empty(): lines_data.append(temp_line)
 
         # for l_i in lines_data:
@@ -167,19 +171,19 @@ def get_current_day_outputs_data() -> List[LineData]:
     return lines_data
 
 
-def get_day_before_outputs_data() -> List[LineData]:
+def get_day_before_outputs_data() -> List[LineWithOutputs]:
     import datetime
     today = datetime.date.today()
     day = datetime.timedelta(days=1)
     yesterday = today - day
-    lines_data: List[LineData] = []
+    lines_data: List[LineWithOutputs] = []
 
     try:
         """get the output from mackenzie api'"""
         smt_in = requests.get(http_url_fix_day(yesterday.strftime("%Y%m%d"), LineSide.SMT_IN))
         smt_out = requests.get(http_url_fix_day(yesterday.strftime("%Y%m%d"), LineSide.SMT_OUT))
         packing = requests.get(http_url_fix_day(yesterday.strftime("%Y%m%d"), LineSide.PACKING))
-        print('api responds', smt_in, smt_out, packing)
+        # print('api responds', smt_in, smt_out, packing)
 
         dic_smt_in = {"smt_in": []}
         for k, g in itertools.groupby(smt_in.json(), key=lambda x: x['LINE']):
@@ -240,11 +244,10 @@ def get_day_before_outputs_data() -> List[LineData]:
 
                 hours.append(temp_hour)
 
-            temp_line = LineData(name=line, output_data=hours)
+            temp_line = LineWithOutputs(name=line, output_data=hours)
             if temp_line.is_empty(): lines_data.append(temp_line)
 
-        for l_i in lines_data:
-            l_i.log()
+
 
     except Exception as e:
         print(e)

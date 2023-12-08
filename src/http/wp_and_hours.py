@@ -1,10 +1,10 @@
-
 from dataclasses import dataclass
 from typing import List
 import requests
-from src.http.get_data_from_mackenzie_api import get_current_day_outputs_data, LineData, OutputsData
+from src.http.get_data_from_mackenzie_api import get_current_day_outputs_data, LineWithOutputs, OutputsData
 from src.lib.util import Server
 from src.lib.util_config import get_ip
+
 
 @dataclass
 class WorkPlan:
@@ -24,7 +24,7 @@ class WorkPlan:
         self.hour = h
 
 
-def wp_with_hours(work_plan, output: List[LineData]) -> List[WorkPlan]:
+def wp_with_hours(work_plan, output: List[LineWithOutputs]) -> List[WorkPlan]:
     """
     the work plan contains the dato form one day of planned production e.g. []
 
@@ -102,3 +102,17 @@ def get_wp() -> List[WorkPlan]:
     work_plan = get_wp_current_day()
     # return a work plan
     return wp_with_hours(work_plan=work_plan, output=outputs)
+
+
+def get_wp_day_before() -> List[WorkPlan]:
+    pass
+
+
+def get_wp_with_day():
+    pass
+
+
+def get_wp_range_of_dates():
+    pass
+
+
