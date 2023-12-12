@@ -34,7 +34,7 @@ def test_live_hours():
 
 def main():
     # TargetMissLogs().execute()
-    update_the_day_before()
+    #update_the_day_before()
     while True:
         # Display the main menu options
         print("\nMain Menu:")

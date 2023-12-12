@@ -25,8 +25,7 @@ def run():  # main even loop rename
         # Execute the function every minute
         print('minutes passed -> ', datetime.now().minute)
 
-        #update_minute()
-        #update_the_day_before()
+        update_minute()
         time.sleep(time_until_next_minute)
 
 
